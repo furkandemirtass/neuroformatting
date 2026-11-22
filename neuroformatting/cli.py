@@ -1,4 +1,5 @@
 import argparse
+import html
 import json
 import re
 from pathlib import Path
@@ -89,8 +90,10 @@ def run_fixtures(fixture_path: Path) -> Dict[str, Any]:
         results.append(
             {
                 "id": case.get("id"),
+                "domain": case.get("domain", "general"),
                 "expected": expected,
                 "actual": res.status,
+                "errors": res.errors,
                 "matched": matched,
             }
         )
@@ -104,6 +107,66 @@ def run_fixtures(fixture_path: Path) -> Dict[str, Any]:
     }
 
 
+def render_html_report(summary: Dict[str, Any]) -> str:
+    rows_html = []
+    for row in summary["cases"]:
+        badge_bg = "#dcfce7" if row["matched"] else "#fee2e2"
+        badge_fg = "#166534" if row["matched"] else "#991b1b"
+        verdict = "PASS" if row["matched"] else "FAIL"
+        err_text = "; ".join(row.get("errors", [])) or "-"
+        rows_html.append(
+            f"""
+            <tr>
+              <td><code>{html.escape(str(row["id"]))}</code></td>
+              <td>{html.escape(str(row["domain"]))}</td>
+              <td><code>{html.escape(str(row["actual"]))}</code></td>
+              <td><code>{html.escape(str(row["expected"]))}</code></td>
+              <td>{html.escape(err_text)}</td>
+              <td><span style="background:{badge_bg};color:{badge_fg};padding:2px 8px;border-radius:6px;font-weight:600;">{verdict}</span></td>
+            </tr>
+            """
+        )
+
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>neuroformatting Audit Report</title>
+  <style>
+    body {{ font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 32px; background: #0f172a; color: #e2e8f0; }}
+    .card {{ background: #1e293b; border-radius: 12px; padding: 24px; max-width: 1100px; margin: auto; }}
+    h1 {{ margin-top: 0; font-size: 22px; }}
+    .summary {{ margin-bottom: 20px; color: #94a3b8; }}
+    table {{ width: 100%; border-collapse: collapse; font-size: 14px; }}
+    th, td {{ text-align: left; padding: 10px 12px; border-bottom: 1px solid #334155; }}
+    th {{ color: #cbd5e1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>neuroformatting — Semantic Grounding Audit Report</h1>
+    <div class="summary">Passed: <strong>{summary["passed"]}/{summary["total"]}</strong> | Failed: <strong>{summary["failed"]}</strong></div>
+    <table>
+      <thead>
+        <tr>
+          <th>Case ID</th>
+          <th>Domain</th>
+          <th>Actual Status</th>
+          <th>Expected</th>
+          <th>Details</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {"".join(rows_html)}
+      </tbody>
+    </table>
+  </div>
+</body>
+</html>
+"""
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run semantic grounding fixture checks.")
     parser.add_argument(
@@ -112,6 +175,18 @@ def main() -> None:
         default=Path("fixtures/semantic_cases.json"),
         help="Path to semantic fixtures JSON file.",
     )
+    parser.add_argument(
+        "--json-out",
+        type=Path,
+        default=None,
+        help="Optional output path to write JSON audit summary.",
+    )
+    parser.add_argument(
+        "--html-out",
+        type=Path,
+        default=None,
+        help="Optional output path to write HTML audit report.",
+    )
     args = parser.parse_args()
 
     summary = run_fixtures(args.fixtures)
@@ -119,6 +194,14 @@ def main() -> None:
     for row in summary["cases"]:
         mark = "PASS" if row["matched"] else "FAIL"
         print(f"  [{mark}] {row['id']}: actual={row['actual']} (expected={row['expected']})")
+
+    if args.json_out is not None:
+        args.json_out.parent.mkdir(parents=True, exist_ok=True)
+        args.json_out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+    if args.html_out is not None:
+        args.html_out.parent.mkdir(parents=True, exist_ok=True)
+        args.html_out.write_text(render_html_report(summary), encoding="utf-8")
 
     if summary["failed"] > 0:
         raise SystemExit(1)
