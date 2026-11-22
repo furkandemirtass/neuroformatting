@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.1.4",
+  "spec_version": "0.2.3",
   "description": "10 realistic production cases where JSON is syntactically valid but semantically broken or ungrounded.",
   "cases": [
     {
@@ -162,6 +162,24 @@
         "reasoning_text": "Checked metrics-3."
       },
       "expected_status": "insufficient_grounding"
+    },
+    {
+      "id": "11_conflicting_escalation_and_tier",
+      "domain": "support_routing",
+      "context": {
+        "sources": {
+          "routing-policy-1": "Basic tier tickets require manual escalation review when escalated is true."
+        }
+      },
+      "payload": {
+        "answer": "Ticket routed automatically without escalation review.",
+        "source_id": "routing-policy-1",
+        "escalated": true,
+        "tier": "basic",
+        "reasoning_tokens": 16,
+        "reasoning_text": "Marked escalated=true while keeping basic tier routing."
+      },
+      "expected_status": "needs_repair"
     }
   ]
 }
