@@ -4,43 +4,53 @@ Commit-point streaming validation and semantic grounding for LLM outputs.
 
 Syntactically valid JSON (`200 OK` from a schema check) can still fail in production: a cited `source_id` may exist in context without supporting the claim (`insufficient_grounding`), fields within the same payload can contradict each other (`reasoning_tokens: 0` alongside non-empty reasoning text), or numeric/time details can drift from the source.
 
-## Quickstart
+## Interactive Demo & Audit Report
+
+Open the interactive browser playground locally:
 
 ```bash
+open demo/index.html
+
 pip install -e .
 python3 -m neuroformatting.cli --html-out /tmp/neuroformatting-report.html --json-out /tmp/neuroformatting-report.json
 PYTHONPATH=. python3 -m unittest discover -s tests -v
 
 
-#### 2. GitHub Actions CI İş Akışını Ekle (`.github/workflows/semantic-audit.yml`)
+### 2. Testleri Çalıştır ve `v0.2.2` Olarak Gönder
 ```bash
-mkdir -p .github/workflows
-cat << 'EOF' > .github/workflows/semantic-audit.yml
-name: Semantic Audit
+PYTHONPATH=. python3 -m unittest discover -s tests -v
+git add .
+git commit -m "docs(readme): link interactive browser demo and regression/risk capabilities"
+git tag v0.2.2
+git push && git push --tags
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+cat << 'EOF' > README.md
+# neuroformatting
 
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Run unit tests
-        run: PYTHONPATH=. python3 -m unittest discover -s tests -v
-      - name: Run semantic fixture audit
-        run: python3 -m neuroformatting.cli --html-out audit-report.html --json-out audit-report.json
-      - name: Upload audit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: neuroformatting-audit-report
-          path: |
-            audit-report.html
-            audit-report.json
+Commit-point streaming validation and semantic grounding for LLM outputs.
+
+Syntactically valid JSON (200 OK from a schema check) can still fail in production: a cited `source_id` may exist in context without supporting the claim (`insufficient_grounding`), fields within the same payload can contradict each other (`reasoning_tokens: 0` alongside non-empty reasoning text), or numeric/time details can drift from the source.
+
+## Interactive Demo & Audit Report
+
+Open the interactive browser playground locally:
+
+`open demo/index.html`
+
+Or generate a standalone HTML/JSON audit report from the 10-case semantic fixture suite:
+
+`pip install -e .`
+`python3 -m neuroformatting.cli --html-out /tmp/neuroformatting-report.html --json-out /tmp/neuroformatting-report.json`
+`PYTHONPATH=. python3 -m unittest discover -s tests -v`
+
+## Key Capabilities
+
+- **Commit-point streaming (`StreamGuard`):** Validates structured units as objects/frames close rather than on raw mid-token deltas.
+- **Two-stage grounding (`membership` + `support`):** Separates whether a referenced source exists from whether the cited content actually supports the claim.
+- **1..n index mapping (`build_indexed_sources`, `resolve_source_index`):** Lets models pick from a bounded integer index while mapping back to real IDs in application code.
+- **Versioned semantic fixtures (`fixtures/semantic_cases.json`):** 10 real-world failure and valid cases across RAG, clinic scheduling, support policy, and telemetry.
+- **Regression gate & risk scoring (`compare_audit_runs`, `compute_audit_risk`):** Compares baseline vs. candidate runs in CLI/CI and scores ungrounded/contradictory outputs.
+
+## License
+
+MIT
