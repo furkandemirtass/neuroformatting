@@ -43,6 +43,29 @@ def _escalation_tier_consistent(payload: dict, ctx: dict) -> bool:
     return True
 
 
+def _no_unfilled_placeholders(payload: dict, ctx: dict) -> bool:
+    combined = " ".join(
+        str(payload.get(k, "")) for k in ("answer", "phone", "reasoning_text")
+    )
+    if re.search(r"\[[A-Z0-9_ -]+\]|\{\{.*?\}\}|\bTBD-[A-Z0-9_-]+\b", combined):
+        return False
+    return True
+
+
+def _action_grounded(payload: dict, ctx: dict) -> bool:
+    if "action" not in payload:
+        return True
+    action_name = str(payload.get("action", "")).strip()
+    allowed = ctx.get("allowed_actions")
+    if isinstance(allowed, list) and action_name not in allowed:
+        return False
+    source_id = payload.get("source_id")
+    sources = ctx.get("sources", {})
+    if source_id in sources and action_name not in str(sources[source_id]):
+        return False
+    return True
+
+
 class TestNeuroformatting(unittest.TestCase):
     def setUp(self) -> None:
         self.schema = OutputSchema(
@@ -81,13 +104,25 @@ class TestNeuroformatting(unittest.TestCase):
                     check=_escalation_tier_consistent,
                     error_message="escalated=true conflicts with tier=basic",
                 ),
+                CrossFieldRule(
+                    name="no_unfilled_placeholders",
+                    failure_category="repairable",
+                    check=_no_unfilled_placeholders,
+                    error_message="unfilled placeholder or TBD value detected",
+                ),
+                CrossFieldRule(
+                    name="action_grounded",
+                    failure_category="ungrounded",
+                    check=_action_grounded,
+                    error_message="action is not grounded in allowed actions/sources",
+                ),
             ],
         )
 
     def test_semantic_fixture_cases(self) -> None:
         fixture_path = Path(__file__).resolve().parent.parent / "fixtures" / "semantic_cases.json"
         spec = json.loads(fixture_path.read_text(encoding="utf-8"))
-        self.assertGreaterEqual(len(spec["cases"]), 11)
+        self.assertGreaterEqual(len(spec["cases"]), 14)
 
         for case in spec["cases"]:
             with self.subTest(case=case["id"]):

@@ -1,5 +1,5 @@
 {
-  "spec_version": "0.2.3",
+  "spec_version": "0.2.8",
   "description": "10 realistic production cases where JSON is syntactically valid but semantically broken or ungrounded.",
   "cases": [
     {
@@ -178,6 +178,61 @@
         "tier": "basic",
         "reasoning_tokens": 16,
         "reasoning_text": "Marked escalated=true while keeping basic tier routing."
+      },
+      "expected_status": "needs_repair"
+    },
+    {
+      "id": "12_unfilled_placeholder_in_clinic_message",
+      "domain": "clinic_agent",
+      "context": {
+        "sources": {
+          "booking-1": "Patient Alex Rivera has a confirmed visit on Tuesday at 14:30."
+        }
+      },
+      "payload": {
+        "answer": "Hi [PATIENT_NAME], your visit is on Tuesday at 14:30.",
+        "source_id": "booking-1",
+        "reasoning_tokens": 12,
+        "reasoning_text": "Prepared confirmation message from booking-1."
+      },
+      "expected_status": "needs_repair"
+    },
+    {
+      "id": "13_hallucinated_tool_action_name",
+      "domain": "agent_actions",
+      "context": {
+        "sources": {
+          "tools-1": "Allowed actions: book_appointment, cancel_appointment, send_sms."
+        },
+        "allowed_actions": [
+          "book_appointment",
+          "cancel_appointment",
+          "send_sms"
+        ]
+      },
+      "payload": {
+        "answer": "Scheduling follow-up via action.",
+        "source_id": "tools-1",
+        "action": "refund_deposit_immediately",
+        "reasoning_tokens": 15,
+        "reasoning_text": "Selected refund_deposit_immediately."
+      },
+      "expected_status": "insufficient_grounding"
+    },
+    {
+      "id": "14_malformed_contact_phone_in_payload",
+      "domain": "contact_validation",
+      "context": {
+        "sources": {
+          "patient-9": "Contact phone on file: +1-555-0194."
+        }
+      },
+      "payload": {
+        "answer": "We will text you at TBD-PHONE before arrival.",
+        "source_id": "patient-9",
+        "phone": "TBD-PHONE",
+        "reasoning_tokens": 11,
+        "reasoning_text": "Inserted phone placeholder."
       },
       "expected_status": "needs_repair"
     }

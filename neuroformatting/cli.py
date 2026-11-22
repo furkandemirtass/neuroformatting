@@ -48,6 +48,29 @@ def _default_escalation_tier_consistent(payload: Dict[str, Any], ctx: Dict[str, 
     return True
 
 
+def _default_no_unfilled_placeholders(payload: Dict[str, Any], ctx: Dict[str, Any]) -> bool:
+    combined = " ".join(
+        str(payload.get(k, "")) for k in ("answer", "phone", "reasoning_text")
+    )
+    if re.search(r"\[[A-Z0-9_ -]+\]|\{\{.*?\}\}|\bTBD-[A-Z0-9_-]+\b", combined):
+        return False
+    return True
+
+
+def _default_action_grounded(payload: Dict[str, Any], ctx: Dict[str, Any]) -> bool:
+    if "action" not in payload:
+        return True
+    action_name = str(payload.get("action", "")).strip()
+    allowed = ctx.get("allowed_actions")
+    if isinstance(allowed, list) and action_name not in allowed:
+        return False
+    source_id = payload.get("source_id")
+    sources = ctx.get("sources", {})
+    if source_id in sources and action_name not in str(sources[source_id]):
+        return False
+    return True
+
+
 def build_default_schema() -> OutputSchema:
     return OutputSchema(
         fields=[
@@ -84,6 +107,18 @@ def build_default_schema() -> OutputSchema:
                 failure_category="repairable",
                 check=_default_escalation_tier_consistent,
                 error_message="escalated=true conflicts with tier=basic",
+            ),
+                    CrossFieldRule(
+                name="no_unfilled_placeholders",
+                failure_category="repairable",
+                check=_default_no_unfilled_placeholders,
+                error_message="unfilled placeholder or TBD value detected",
+            ),
+            CrossFieldRule(
+                name="action_grounded",
+                failure_category="ungrounded",
+                check=_default_action_grounded,
+                error_message="action is not grounded in allowed actions/sources",
             ),
         ],
     )
