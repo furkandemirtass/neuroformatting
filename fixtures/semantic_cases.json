@@ -1,0 +1,52 @@
+{
+  "spec_version": "0.1.2",
+  "description": "Syntactically valid JSON cases testing cross-field invariants and membership vs. support grounding.",
+  "cases": [
+    {
+      "id": "valid_grounded_claim",
+      "context": {
+        "sources": {
+          "doc-101": "Stream validation runs at commit points when a JSON object closes."
+        }
+      },
+      "payload": {
+        "answer": "Validation runs at commit points.",
+        "source_id": "doc-101",
+        "reasoning_tokens": 24,
+        "reasoning_text": "Checked commit-point behavior in doc-101."
+      },
+      "expected_status": "valid"
+    },
+    {
+      "id": "false_pass_id_exists_but_claim_unsupported",
+      "context": {
+        "sources": {
+          "doc-101": "Stream validation runs at commit points when a JSON object closes.",
+          "doc-202": "Retry prompts should carry the exact violated rule."
+        }
+      },
+      "payload": {
+        "answer": "Validation runs at commit points.",
+        "source_id": "doc-202",
+        "reasoning_tokens": 18,
+        "reasoning_text": "Picked an allowed source id that does not support the claim."
+      },
+      "expected_status": "insufficient_grounding"
+    },
+    {
+      "id": "cross_field_zero_tokens_with_reasoning_text",
+      "context": {
+        "sources": {
+          "doc-101": "Stream validation runs at commit points when a JSON object closes."
+        }
+      },
+      "payload": {
+        "answer": "Validation runs at commit points.",
+        "source_id": "doc-101",
+        "reasoning_tokens": 0,
+        "reasoning_text": "Step-by-step analysis claiming zero reasoning tokens were spent."
+      },
+      "expected_status": "needs_repair"
+    }
+  ]
+}

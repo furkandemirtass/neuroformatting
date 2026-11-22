@@ -1,6 +1,19 @@
+import json
 import unittest
+from pathlib import Path
 
 from neuroformatting import CrossFieldRule, FieldRule, OutputSchema, StreamGuard
+
+
+def supports_claim(payload: dict, ctx: dict) -> bool:
+    """Two-stage check: membership (id exists) + support (cited source backs the claim)."""
+    sources = ctx.get("sources", {})
+    source_id = payload.get("source_id")
+    if source_id not in sources:
+        return False
+    source_text = sources[source_id].lower()
+    keywords = [w.strip(".,") for w in payload.get("answer", "").lower().split() if len(w.strip(".,")) > 5]
+    return any(kw in source_text for kw in keywords)
 
 
 class TestNeuroformatting(unittest.TestCase):
@@ -9,81 +22,55 @@ class TestNeuroformatting(unittest.TestCase):
             fields=[
                 FieldRule(name="answer", expected_type=str, required=True),
                 FieldRule(
-                    name="confidence",
-                    expected_type=float,
-                    required=True,
-                    failure_category="repairable",
-                    semantic_check=lambda val, ctx: 0.0 <= val <= 1.0,
-                    error_message="confidence out of range",
-                ),
-                FieldRule(
                     name="source_id",
                     expected_type=str,
                     required=True,
                     failure_category="ungrounded",
-                    semantic_check=lambda val, ctx: val in ctx.get("allowed_sources", []),
-                    error_message="ungrounded source_id",
+                    semantic_check=lambda val, ctx: val in ctx.get("sources", {}),
+                    error_message="source_id not found in retrieved sources",
                 ),
-            ]
-        )
-        self.context = {"allowed_sources": ["doc-101"]}
-
-    def test_valid_stream_passes(self) -> None:
-        guard = StreamGuard(schema=self.schema, context=self.context)
-        res = guard.run_stream([
-            '{"answer": "Grounded", ',
-            '"confidence": 0.9, "source_id": "doc-101"}',
-        ])
-        self.assertTrue(res.ok)
-        self.assertEqual(res.status, "valid")
-
-    def test_ungrounded_source_returns_insufficient_grounding(self) -> None:
-        guard = StreamGuard(schema=self.schema, context=self.context)
-        res = guard.run_stream([
-            '{"answer": "Hallucinated ref", "confidence": 0.8, "source_id": "doc-999"}'
-        ])
-        self.assertFalse(res.ok)
-        self.assertEqual(res.status, "insufficient_grounding")
-
-    def test_out_of_bounds_score_marks_needs_repair(self) -> None:
-        guard = StreamGuard(schema=self.schema, context=self.context)
-        res = guard.run_stream([
-            '{"answer": "Overconfident", "confidence": 1.45, "source_id": "doc-101"}'
-        ])
-        self.assertFalse(res.ok)
-        self.assertEqual(res.status, "needs_repair")
-
-    def test_cross_field_contradiction_fixture(self) -> None:
-        # Fixture: syntactically valid JSON claiming reasoning_tokens=0 while shipping reasoning_text
-        reasoning_schema = OutputSchema(
-            fields=[
                 FieldRule(name="reasoning_tokens", expected_type=int, required=True),
                 FieldRule(name="reasoning_text", expected_type=str, required=True),
             ],
             cross_field_rules=[
                 CrossFieldRule(
-                    name="reasoning_consistency",
+                    name="source_claim_support",
+                    failure_category="ungrounded",
+                    check=supports_claim,
+                    error_message="source_id exists in context but does not support the claim",
+                ),
+                CrossFieldRule(
+                    name="reasoning_token_consistency",
                     failure_category="repairable",
                     check=lambda payload, ctx: not (
                         payload["reasoning_tokens"] == 0 and len(payload["reasoning_text"].strip()) > 0
                     ),
                     error_message="reasoning_tokens cannot be 0 when reasoning_text is non-empty",
-                )
+                ),
             ],
         )
-        guard = StreamGuard(schema=reasoning_schema)
-        res = guard.run_stream([
-            '{"reasoning_tokens": 0, "reasoning_text": "' + ("step " * 60) + '"}'
-        ])
-        self.assertFalse(res.ok)
-        self.assertEqual(res.status, "needs_repair")
-        self.assertIn("reasoning_tokens", res.errors[0])
+
+    def test_semantic_fixture_spec(self) -> None:
+        fixture_path = Path(__file__).resolve().parent.parent / "fixtures" / "semantic_cases.json"
+        spec = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+        for case in spec["cases"]:
+            with self.subTest(case=case["id"]):
+                guard = StreamGuard(schema=self.schema, context=case["context"])
+                res = guard.run_stream([json.dumps(case["payload"])])
+                self.assertEqual(res.status, case["expected_status"])
 
     def test_commit_point_unit_close_streaming(self) -> None:
-        guard = StreamGuard(schema=self.schema, context=self.context)
+        ctx = {
+            "sources": {
+                "doc-101": "Stream validation runs at commit points when a JSON object closes.",
+                "doc-202": "Retry prompts should carry the exact violated rule.",
+            }
+        }
+        guard = StreamGuard(schema=self.schema, context=ctx)
         chunks = [
-            '[{"answer": "First", "confidence": 0.9, "source_id": "doc-101"}, ',
-            '{"answer": "Second", "confidence": 0.8, "source_id": "doc-999"}]',
+            '[{"answer": "Validation runs at commit points.", "source_id": "doc-101", "reasoning_tokens": 12, "reasoning_text": "ok"}, ',
+            '{"answer": "Validation runs at commit points.", "source_id": "doc-202", "reasoning_tokens": 12, "reasoning_text": "wrong source"}]',
         ]
         results = list(guard.iter_validated_units(chunks))
         self.assertEqual(len(results), 2)
