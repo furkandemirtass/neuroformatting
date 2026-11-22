@@ -1,41 +1,46 @@
 # neuroformatting
 
-Lightweight schema enforcement and semantic grounding for structured LLM streams.
+Commit-point streaming validation and semantic grounding for LLM outputs.
 
-## Why `neuroformatting`?
+Syntactically valid JSON (`200 OK` from a schema check) can still fail in production: a cited `source_id` may exist in context without supporting the claim (`insufficient_grounding`), fields within the same payload can contradict each other (`reasoning_tokens: 0` alongside non-empty reasoning text), or numeric/time details can drift from the source.
 
-Validating JSON syntax is rarely enough for production LLM pipelines. Models can return syntactically valid JSON that still violates **semantic or grounding rules**—such as citing a `source_id` that does not exist in retrieved context or returning an out-of-range score.
+## Quickstart
 
-`neuroformatting` gives you a minimal, dependency-free layer to validate streamed outputs against both structural types and context-aware semantic checks.
-
-## Quick Example
-
-```python
-from neuroformatting import FieldRule, OutputSchema, StreamGuard
-
-schema = OutputSchema(
-    fields=[
-        FieldRule(name="answer", expected_type=str),
-        FieldRule(
-            name="confidence",
-            expected_type=float,
-            semantic_check=lambda val, ctx: 0.0 <= val <= 1.0,
-            error_message="confidence must be between 0.0 and 1.0",
-        ),
-        FieldRule(
-            name="source_id",
-            expected_type=str,
-            semantic_check=lambda val, ctx: val in ctx.get("allowed_sources", []),
-            error_message="source_id must match provided context",
-        ),
-    ]
-)
-
-guard = StreamGuard(schema=schema, context={"allowed_sources": ["doc-101"]})
-result = guard.run_stream(['{"answer": "Grounded response", "confidence": 0.88, "source_id": "doc-101"}'])
-
-print(result.ok, result.data)
-
-PYTHONPATH=. python3 examples/demo.py
+```bash
+pip install -e .
+python3 -m neuroformatting.cli --html-out /tmp/neuroformatting-report.html --json-out /tmp/neuroformatting-report.json
 PYTHONPATH=. python3 -m unittest discover -s tests -v
 
+
+#### 2. GitHub Actions CI İş Akışını Ekle (`.github/workflows/semantic-audit.yml`)
+```bash
+mkdir -p .github/workflows
+cat << 'EOF' > .github/workflows/semantic-audit.yml
+name: Semantic Audit
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Run unit tests
+        run: PYTHONPATH=. python3 -m unittest discover -s tests -v
+      - name: Run semantic fixture audit
+        run: python3 -m neuroformatting.cli --html-out audit-report.html --json-out audit-report.json
+      - name: Upload audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: neuroformatting-audit-report
+          path: |
+            audit-report.html
+            audit-report.json
