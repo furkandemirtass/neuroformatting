@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 from .guard import StreamGuard
 from .regression import compare_audit_runs
+from .risk import compute_audit_risk
 from .schema import CrossFieldRule, FieldRule, OutputSchema
 
 
@@ -223,6 +224,7 @@ def main() -> None:
     args = parser.parse_args()
 
     summary = run_fixtures(args.fixtures)
+    summary["risk"] = compute_audit_risk(summary)
     regression: Optional[Dict[str, Any]] = None
     if args.baseline is not None:
         baseline_data = json.loads(args.baseline.read_text(encoding="utf-8"))
@@ -230,6 +232,7 @@ def main() -> None:
         summary["regression"] = regression
 
     print(f"Fixtures passed: {summary['passed']}/{summary['total']}")
+    print(f"Audit risk: score={summary['risk']['risk_score']} ungrounded={summary['risk']['ungrounded_count']}")
     for row in summary["cases"]:
         mark = "PASS" if row["matched"] else "FAIL"
         print(f"  [{mark}] {row['id']}: actual={row['actual']} (expected={row['expected']})")
