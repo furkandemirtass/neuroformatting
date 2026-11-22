@@ -3,9 +3,10 @@ import html
 import json
 import re
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .guard import StreamGuard
+from .regression import compare_audit_runs
 from .schema import CrossFieldRule, FieldRule, OutputSchema
 
 
@@ -107,7 +108,7 @@ def run_fixtures(fixture_path: Path) -> Dict[str, Any]:
     }
 
 
-def render_html_report(summary: Dict[str, Any]) -> str:
+def render_html_report(summary: Dict[str, Any], regression: Optional[Dict[str, Any]] = None) -> str:
     rows_html = []
     for row in summary["cases"]:
         badge_bg = "#dcfce7" if row["matched"] else "#fee2e2"
@@ -126,6 +127,18 @@ def render_html_report(summary: Dict[str, Any]) -> str:
             </tr>
             """
         )
+
+    reg_html = ""
+    if regression is not None:
+        gate_label = "PASSED" if regression["gate_passed"] else "BLOCKED (REGRESSION DETECTED)"
+        gate_color = "#4ade80" if regression["gate_passed"] else "#f87171"
+        reg_html = f"""
+        <div class="summary" style="margin-top:12px;">
+          Regression Gate: <strong style="color:{gate_color};">{html.escape(gate_label)}</strong>
+          | Regressions: <strong>{regression["regression_count"]}</strong>
+          | Improvements: <strong>{regression["improvement_count"]}</strong>
+        </div>
+        """
 
     return f"""<!doctype html>
 <html lang="en">
@@ -146,6 +159,7 @@ def render_html_report(summary: Dict[str, Any]) -> str:
   <div class="card">
     <h1>neuroformatting — Semantic Grounding Audit Report</h1>
     <div class="summary">Passed: <strong>{summary["passed"]}/{summary["total"]}</strong> | Failed: <strong>{summary["failed"]}</strong></div>
+    {reg_html}
     <table>
       <thead>
         <tr>
@@ -176,6 +190,12 @@ def main() -> None:
         help="Path to semantic fixtures JSON file.",
     )
     parser.add_argument(
+        "--baseline",
+        type=Path,
+        default=None,
+        help="Optional baseline JSON audit summary to compare against.",
+    )
+    parser.add_argument(
         "--json-out",
         type=Path,
         default=None,
@@ -190,10 +210,22 @@ def main() -> None:
     args = parser.parse_args()
 
     summary = run_fixtures(args.fixtures)
+    regression: Optional[Dict[str, Any]] = None
+    if args.baseline is not None:
+        baseline_data = json.loads(args.baseline.read_text(encoding="utf-8"))
+        regression = compare_audit_runs(baseline_data, summary)
+        summary["regression"] = regression
+
     print(f"Fixtures passed: {summary['passed']}/{summary['total']}")
     for row in summary["cases"]:
         mark = "PASS" if row["matched"] else "FAIL"
         print(f"  [{mark}] {row['id']}: actual={row['actual']} (expected={row['expected']})")
+
+    if regression is not None:
+        print(
+            f"Regression gate: {'PASS' if regression['gate_passed'] else 'FAIL'} "
+            f"(regressions={regression['regression_count']}, improvements={regression['improvement_count']})"
+        )
 
     if args.json_out is not None:
         args.json_out.parent.mkdir(parents=True, exist_ok=True)
@@ -201,9 +233,9 @@ def main() -> None:
 
     if args.html_out is not None:
         args.html_out.parent.mkdir(parents=True, exist_ok=True)
-        args.html_out.write_text(render_html_report(summary), encoding="utf-8")
+        args.html_out.write_text(render_html_report(summary, regression=regression), encoding="utf-8")
 
-    if summary["failed"] > 0:
+    if summary["failed"] > 0 or (regression is not None and not regression["gate_passed"]):
         raise SystemExit(1)
 
 
