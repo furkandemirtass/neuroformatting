@@ -40,6 +40,13 @@ def _default_supports_claim(payload: Dict[str, Any], ctx: Dict[str, Any]) -> boo
     return matched >= min(2, len(answer_words))
 
 
+def _default_escalation_tier_consistent(payload: Dict[str, Any], ctx: Dict[str, Any]) -> bool:
+    if "escalated" in payload and "tier" in payload:
+        if bool(payload.get("escalated")) and str(payload.get("tier", "")).lower() == "basic":
+            return False
+    return True
+
+
 def build_default_schema() -> OutputSchema:
     return OutputSchema(
         fields=[
@@ -70,6 +77,12 @@ def build_default_schema() -> OutputSchema:
                     or (payload["reasoning_tokens"] > 0 and len(str(payload["reasoning_text"]).strip()) == 0)
                 ),
                 error_message="inconsistent reasoning_tokens and reasoning_text",
+            ),
+                    CrossFieldRule(
+                name="escalation_tier_consistency",
+                failure_category="repairable",
+                check=_default_escalation_tier_consistent,
+                error_message="escalated=true conflicts with tier=basic",
             ),
         ],
     )

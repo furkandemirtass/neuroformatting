@@ -11,28 +11,22 @@ def _tokens(text: str) -> set[str]:
 
 
 def supports_claim(payload: dict, ctx: dict) -> bool:
-    """Checks membership + key factual tokens (including times/numbers) in the cited source."""
     sources = ctx.get("sources", {})
     source_id = payload.get("source_id")
     if source_id not in sources:
         return False
 
-    source_text = sources[source_id].lower()
-    answer_text = payload.get("answer", "").lower()
+    source_text = str(sources[source_id]).lower()
+    answer_text = str(payload.get("answer", "")).lower()
 
-    # Check explicit time tokens (e.g. 14:30, 16:00)
-    times_in_answer = re.findall(r"\b\d{1,2}:\d{2}\b", answer_text)
-    for t in times_in_answer:
+    for t in re.findall(r"\b\d{1,2}:\d{2}\b", answer_text):
         if t not in source_text:
             return False
 
-    # Check numeric tokens (e.g. 120ms, 45ms, 5, 10)
-    nums_in_answer = re.findall(r"\b\d+(?:ms)?\b", answer_text)
-    for n in nums_in_answer:
+    for n in re.findall(r"\b\d+(?:ms)?\b", answer_text):
         if n not in source_text:
             return False
 
-    # Check content word overlap (excluding generic filler words)
     stopwords = {"your", "with", "from", "that", "this", "have", "been", "into", "after", "all"}
     answer_words = [w for w in _tokens(answer_text) if w not in stopwords]
     if not answer_words:
@@ -40,6 +34,13 @@ def supports_claim(payload: dict, ctx: dict) -> bool:
 
     matched = sum(1 for w in answer_words if w in source_text)
     return matched >= min(2, len(answer_words))
+
+
+def _escalation_tier_consistent(payload: dict, ctx: dict) -> bool:
+    if "escalated" in payload and "tier" in payload:
+        if bool(payload.get("escalated")) and str(payload.get("tier", "")).lower() == "basic":
+            return False
+    return True
 
 
 class TestNeuroformatting(unittest.TestCase):
@@ -69,18 +70,24 @@ class TestNeuroformatting(unittest.TestCase):
                     name="reasoning_token_consistency",
                     failure_category="repairable",
                     check=lambda payload, ctx: not (
-                        (payload["reasoning_tokens"] == 0 and len(payload["reasoning_text"].strip()) > 0)
-                        or (payload["reasoning_tokens"] > 0 and len(payload["reasoning_text"].strip()) == 0)
+                        (payload["reasoning_tokens"] == 0 and len(str(payload["reasoning_text"]).strip()) > 0)
+                        or (payload["reasoning_tokens"] > 0 and len(str(payload["reasoning_text"]).strip()) == 0)
                     ),
                     error_message="inconsistent reasoning_tokens and reasoning_text",
+                ),
+                CrossFieldRule(
+                    name="escalation_tier_consistency",
+                    failure_category="repairable",
+                    check=_escalation_tier_consistent,
+                    error_message="escalated=true conflicts with tier=basic",
                 ),
             ],
         )
 
-    def test_ten_semantic_fixture_cases(self) -> None:
+    def test_semantic_fixture_cases(self) -> None:
         fixture_path = Path(__file__).resolve().parent.parent / "fixtures" / "semantic_cases.json"
         spec = json.loads(fixture_path.read_text(encoding="utf-8"))
-        self.assertEqual(len(spec["cases"]), 10)
+        self.assertGreaterEqual(len(spec["cases"]), 11)
 
         for case in spec["cases"]:
             with self.subTest(case=case["id"]):
