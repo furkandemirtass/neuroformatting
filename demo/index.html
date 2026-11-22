@@ -113,10 +113,10 @@
       <div>
         <h1>neuroformatting — False Pass vs. Semantic Guard</h1>
         <div class="sub">
-          Syntax and JSON Schema checks often return <strong>valid</strong> even when an LLM cites a non-supporting source ID, contradicts telemetry fields, or drifts on numbers/times. Select a production scenario below to inspect the difference.
+          Syntax and JSON Schema checks often return <strong>valid</strong> even when an LLM cites a non-supporting source ID, contradicts telemetry or routing fields, or drifts on numbers/times. Select a production scenario below to inspect the difference.
         </div>
       </div>
-      <div class="pill">v0.2.0 • Commit-Point &amp; Grounding</div>
+      <div class="pill">v0.2.4 • 11 Semantic Fixtures</div>
     </div>
 
     <div class="grid">
@@ -136,7 +136,7 @@
           <div class="box">
             <div class="label">Schema / Syntax Check Only</div>
             <span class="badge pass-schema">200 OK — SCHEMA VALID</span>
-            <div class="reason">Types and required keys match, so structural validators miss semantic or grounding failures.</div>
+            <div class="reason">Types and required keys match, so structural validators miss semantic or cross-field failures.</div>
           </div>
 
           <div class="box">
@@ -159,6 +159,15 @@
         status: "insufficient_grounding",
         badgeClass: "bad",
         reason: "source_id 'doc-202' exists in context, but its text does not support the claim. Flagged as insufficient_grounding instead of a false pass."
+      },
+      {
+        title: "Escalated + Tier Basic Conflict",
+        domain: "support_routing • risk +2",
+        context: { "routing-policy-1": "Basic tier tickets require manual escalation review when escalated is true." },
+        payload: { answer: "Ticket routed automatically without escalation review.", source_id: "routing-policy-1", escalated: true, tier: "basic", reasoning_tokens: 16, reasoning_text: "Marked escalated=true while keeping basic tier routing." },
+        status: "needs_repair",
+        badgeClass: "warn",
+        reason: "Cross-field contradiction: escalated=true conflicts with tier='basic'. Caught before silent routing drops escalation review."
       },
       {
         title: "Contradiction: 0 Tokens + Reasoning Text",
