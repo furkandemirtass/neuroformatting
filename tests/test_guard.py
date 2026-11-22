@@ -1,19 +1,45 @@
 import json
+import re
 import unittest
 from pathlib import Path
 
 from neuroformatting import CrossFieldRule, FieldRule, OutputSchema, StreamGuard
 
 
+def _tokens(text: str) -> set[str]:
+    return {t for t in re.findall(r"[a-z0-9:]+", text.lower()) if len(t) > 2}
+
+
 def supports_claim(payload: dict, ctx: dict) -> bool:
-    """Two-stage check: membership (id exists) + support (cited source backs the claim)."""
+    """Checks membership + key factual tokens (including times/numbers) in the cited source."""
     sources = ctx.get("sources", {})
     source_id = payload.get("source_id")
     if source_id not in sources:
         return False
+
     source_text = sources[source_id].lower()
-    keywords = [w.strip(".,") for w in payload.get("answer", "").lower().split() if len(w.strip(".,")) > 5]
-    return any(kw in source_text for kw in keywords)
+    answer_text = payload.get("answer", "").lower()
+
+    # Check explicit time tokens (e.g. 14:30, 16:00)
+    times_in_answer = re.findall(r"\b\d{1,2}:\d{2}\b", answer_text)
+    for t in times_in_answer:
+        if t not in source_text:
+            return False
+
+    # Check numeric tokens (e.g. 120ms, 45ms, 5, 10)
+    nums_in_answer = re.findall(r"\b\d+(?:ms)?\b", answer_text)
+    for n in nums_in_answer:
+        if n not in source_text:
+            return False
+
+    # Check content word overlap (excluding generic filler words)
+    stopwords = {"your", "with", "from", "that", "this", "have", "been", "into", "after", "all"}
+    answer_words = [w for w in _tokens(answer_text) if w not in stopwords]
+    if not answer_words:
+        return False
+
+    matched = sum(1 for w in answer_words if w in source_text)
+    return matched >= min(2, len(answer_words))
 
 
 class TestNeuroformatting(unittest.TestCase):
@@ -37,22 +63,24 @@ class TestNeuroformatting(unittest.TestCase):
                     name="source_claim_support",
                     failure_category="ungrounded",
                     check=supports_claim,
-                    error_message="source_id exists in context but does not support the claim",
+                    error_message="source_id does not support the claim",
                 ),
                 CrossFieldRule(
                     name="reasoning_token_consistency",
                     failure_category="repairable",
                     check=lambda payload, ctx: not (
-                        payload["reasoning_tokens"] == 0 and len(payload["reasoning_text"].strip()) > 0
+                        (payload["reasoning_tokens"] == 0 and len(payload["reasoning_text"].strip()) > 0)
+                        or (payload["reasoning_tokens"] > 0 and len(payload["reasoning_text"].strip()) == 0)
                     ),
-                    error_message="reasoning_tokens cannot be 0 when reasoning_text is non-empty",
+                    error_message="inconsistent reasoning_tokens and reasoning_text",
                 ),
             ],
         )
 
-    def test_semantic_fixture_spec(self) -> None:
+    def test_ten_semantic_fixture_cases(self) -> None:
         fixture_path = Path(__file__).resolve().parent.parent / "fixtures" / "semantic_cases.json"
         spec = json.loads(fixture_path.read_text(encoding="utf-8"))
+        self.assertEqual(len(spec["cases"]), 10)
 
         for case in spec["cases"]:
             with self.subTest(case=case["id"]):

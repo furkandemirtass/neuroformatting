@@ -1,9 +1,10 @@
 {
-  "spec_version": "0.1.2",
-  "description": "Syntactically valid JSON cases testing cross-field invariants and membership vs. support grounding.",
+  "spec_version": "0.1.4",
+  "description": "10 realistic production cases where JSON is syntactically valid but semantically broken or ungrounded.",
   "cases": [
     {
-      "id": "valid_grounded_claim",
+      "id": "01_valid_grounded_claim",
+      "domain": "streaming_validation",
       "context": {
         "sources": {
           "doc-101": "Stream validation runs at commit points when a JSON object closes."
@@ -18,7 +19,8 @@
       "expected_status": "valid"
     },
     {
-      "id": "false_pass_id_exists_but_claim_unsupported",
+      "id": "02_false_pass_id_exists_claim_unsupported",
+      "domain": "rag_grounding",
       "context": {
         "sources": {
           "doc-101": "Stream validation runs at commit points when a JSON object closes.",
@@ -29,12 +31,13 @@
         "answer": "Validation runs at commit points.",
         "source_id": "doc-202",
         "reasoning_tokens": 18,
-        "reasoning_text": "Picked an allowed source id that does not support the claim."
+        "reasoning_text": "Selected an allowed source id that does not support the claim."
       },
       "expected_status": "insufficient_grounding"
     },
     {
-      "id": "cross_field_zero_tokens_with_reasoning_text",
+      "id": "03_contradiction_zero_reasoning_tokens_with_text",
+      "domain": "reasoning_telemetry",
       "context": {
         "sources": {
           "doc-101": "Stream validation runs at commit points when a JSON object closes."
@@ -44,9 +47,121 @@
         "answer": "Validation runs at commit points.",
         "source_id": "doc-101",
         "reasoning_tokens": 0,
-        "reasoning_text": "Step-by-step analysis claiming zero reasoning tokens were spent."
+        "reasoning_text": "Detailed multi-step reasoning text despite reporting zero reasoning tokens."
       },
       "expected_status": "needs_repair"
+    },
+    {
+      "id": "04_missing_source_id_in_retrieved_sources",
+      "domain": "rag_grounding",
+      "context": {
+        "sources": {
+          "doc-101": "Stream validation runs at commit points when a JSON object closes."
+        }
+      },
+      "payload": {
+        "answer": "Validation runs at commit points.",
+        "source_id": "doc-999",
+        "reasoning_tokens": 10,
+        "reasoning_text": "Referenced a non-existent source document."
+      },
+      "expected_status": "insufficient_grounding"
+    },
+    {
+      "id": "05_clinic_appointment_ungrounded_slot",
+      "domain": "clinic_agent",
+      "context": {
+        "sources": {
+          "schedule-1": "Available appointments on Tuesday: 10:00 and 14:30."
+        }
+      },
+      "payload": {
+        "answer": "Your appointment is confirmed for Tuesday at 16:00.",
+        "source_id": "schedule-1",
+        "reasoning_tokens": 15,
+        "reasoning_text": "Checked available slots in schedule-1."
+      },
+      "expected_status": "insufficient_grounding"
+    },
+    {
+      "id": "06_clinic_appointment_valid_grounded_slot",
+      "domain": "clinic_agent",
+      "context": {
+        "sources": {
+          "schedule-1": "Available appointments on Tuesday: 10:00 and 14:30."
+        }
+      },
+      "payload": {
+        "answer": "Your appointment is available on Tuesday at 14:30.",
+        "source_id": "schedule-1",
+        "reasoning_tokens": 14,
+        "reasoning_text": "Matched 14:30 from schedule-1."
+      },
+      "expected_status": "valid"
+    },
+    {
+      "id": "07_empty_reasoning_text_with_high_reasoning_tokens",
+      "domain": "reasoning_telemetry",
+      "context": {
+        "sources": {
+          "doc-101": "Stream validation runs at commit points when a JSON object closes."
+        }
+      },
+      "payload": {
+        "answer": "Validation runs at commit points.",
+        "source_id": "doc-101",
+        "reasoning_tokens": 250,
+        "reasoning_text": "   "
+      },
+      "expected_status": "needs_repair"
+    },
+    {
+      "id": "08_ungrounded_policy_claim_in_support_agent",
+      "domain": "support_agent",
+      "context": {
+        "sources": {
+          "policy-7": "Refunds are reviewed within 5 business days after item inspection."
+        }
+      },
+      "payload": {
+        "answer": "Instant refunds are issued automatically within 10 minutes.",
+        "source_id": "policy-7",
+        "reasoning_tokens": 20,
+        "reasoning_text": "Reviewed policy-7."
+      },
+      "expected_status": "insufficient_grounding"
+    },
+    {
+      "id": "09_valid_grounded_policy_claim",
+      "domain": "support_agent",
+      "context": {
+        "sources": {
+          "policy-7": "Refunds are reviewed within 5 business days after item inspection."
+        }
+      },
+      "payload": {
+        "answer": "Refunds are reviewed within 5 business days after inspection.",
+        "source_id": "policy-7",
+        "reasoning_tokens": 19,
+        "reasoning_text": "Confirmed 5 business days review window in policy-7."
+      },
+      "expected_status": "valid"
+    },
+    {
+      "id": "10_ungrounded_numeric_claim_against_source",
+      "domain": "reporting_agent",
+      "context": {
+        "sources": {
+          "metrics-3": "Quarterly latency averaged 120ms across 5000 requests."
+        }
+      },
+      "payload": {
+        "answer": "Quarterly latency averaged 45ms across all regions.",
+        "source_id": "metrics-3",
+        "reasoning_tokens": 16,
+        "reasoning_text": "Checked metrics-3."
+      },
+      "expected_status": "insufficient_grounding"
     }
   ]
 }
