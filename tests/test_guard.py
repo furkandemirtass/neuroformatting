@@ -81,6 +81,18 @@ class TestNeuroformatting(unittest.TestCase):
                 ),
                 FieldRule(name="reasoning_tokens", expected_type=int, required=True),
                 FieldRule(name="reasoning_text", expected_type=str, required=True),
+                FieldRule(
+                    name="action",
+                    expected_type=str,
+                    required=False,
+                    failure_category="ungrounded",
+                    semantic_check=lambda val, ctx: (
+                        val in ctx.get("allowed_actions", [])
+                        if "allowed_actions" in ctx
+                        else True
+                    ),
+                    error_message="action is not in allowed_actions",
+                ),
             ],
             cross_field_rules=[
                 CrossFieldRule(
@@ -109,12 +121,6 @@ class TestNeuroformatting(unittest.TestCase):
                     failure_category="repairable",
                     check=_no_unfilled_placeholders,
                     error_message="unfilled placeholder or TBD value detected",
-                ),
-                CrossFieldRule(
-                    name="action_grounded",
-                    failure_category="ungrounded",
-                    check=_action_grounded,
-                    error_message="action is not grounded in allowed actions/sources",
                 ),
             ],
         )

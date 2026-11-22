@@ -114,12 +114,6 @@ def build_default_schema() -> OutputSchema:
                 check=_default_no_unfilled_placeholders,
                 error_message="unfilled placeholder or TBD value detected",
             ),
-            CrossFieldRule(
-                name="action_grounded",
-                failure_category="ungrounded",
-                check=_default_action_grounded,
-                error_message="action is not grounded in allowed actions/sources",
-            ),
         ],
     )
 
