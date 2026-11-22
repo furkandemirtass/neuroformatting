@@ -54,3 +54,12 @@ Or generate a standalone HTML/JSON audit report from the 10-case semantic fixtur
 ## License
 
 MIT
+
+## Custom Schemas & Production Guardrails
+
+Need strict Pydantic v2 validation, deterministic output rules, or reliability guardrails for your LLM workflows?
+
+I build production-ready Python validation layers for structured outputs, tool/API safety checks, and retry/error handling.
+
+- **Fiverr Gig:** https://www.fiverr.com/demirtasfurkan/create-python-guardrails-for-ai
+- Feel free to reach out with your schema requirements, sample payloads, or target LLM stack before ordering.
