@@ -1,5 +1,24 @@
 # neuroformatting
 
+Deterministic output validation, grounding checks, and **pre-side-effect target pinning** for LLM & AI agent workflows in Python.
+
+### What It Catches Before Execution (`200 OK` Is Not Enough)
+Run `PYTHONPATH=. python3 examples/production_failures.py` to reproduce all 5 cases locally:
+
+```text
+1. Placeholder leak in outbound email -> {'status': 'blocked', 'reason': 'PLACEHOLDER_DETECTED'}
+2. Cross-field contradiction (escalated=True with tier=basic) -> {'status': 'blocked', 'reason': 'CONTRADICTORY_TIER_FOR_ESCALATION'}
+3. Ungrounded meeting time outside verified context -> {'status': 'blocked', 'reason': 'UNGROUNDED_TIME_SLOT'}
+4. Poisoned email target from untrusted retrieved text -> {'status': 'blocked', 'reason': 'UNTRUSTED_TARGET_SOURCE', 'message': "Blocked side effect: 'to' came from untrusted source 'retrieved_doc'."}
+5. Clean, grounded, and pinned payload -> {'status': 'ok', 'detail': 'SENT email to ops@client.com | subject=Confirmed Slot'}
+
+### Commercial & Freelance Implementation
+Need deterministic guardrails, Pydantic validation, or side-effect safety wired into an existing Python agent/API? Available for fixed-scope guardrail audits and production integrations.
+
+---
+
+# neuroformatting
+
 Commit-point streaming validation and semantic grounding for LLM outputs.
 
 Syntactically valid JSON (`200 OK` from a schema check) can still fail in production: a cited `source_id` may exist in context without supporting the claim (`insufficient_grounding`), fields within the same payload can contradict each other (`reasoning_tokens: 0` alongside non-empty reasoning text), or numeric/time details can drift from the source.
